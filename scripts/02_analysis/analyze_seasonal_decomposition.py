@@ -6,19 +6,24 @@ import matplotlib.pyplot as plt
 import os
 import seaborn as sns
 import glob
+import sys
 
 # --- 데이터 경로 설정 (로컬 파일 시스템 기준) ---
-# NOTE: 이 스크립트는 통합 스크립트(merge_datasets_pandas_only.py)가 생성한 CSV 파일을 읽습니다.
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__)) 
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, '..', 'results', 'pandas_analysis')
+# NOTE: 이 스크립트는 scripts/02_analysis/ 폴더에 위치하며, 두 단계 상위로 이동하여 PROJECT_ROOT를 찾습니다.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) 
+PROJECT_ROOT_DIR = os.path.join(SCRIPT_DIR, '..', '..') # BDP-Airquality-Analysis 루트 폴더
+
+# 출력 폴더 경로 (통합된 CSV 파일이 저장된 위치)
+OUTPUT_DIR = os.path.join(PROJECT_ROOT_DIR, 'results', 'pandas_analysis')
+# 입력: 최종 통합 데이터셋 (Merge Script의 출력 CSV 파일)
 UNIFIED_MERGED_CSV = os.path.join(OUTPUT_DIR, "unified_national_merged_data.csv")
 
-# --- 출력 이미지 및 CSV 저장 경로 ---
+# 출력: 계절성 분해 분석 결과 저장 경로
 OUTPUT_LOCAL_DECOMPOSE_PM10 = os.path.join(OUTPUT_DIR, "seasonal_decomposition_pm10.png")
 OUTPUT_LOCAL_DECOMPOSE_POWER = os.path.join(OUTPUT_DIR, "seasonal_decomposition_power.png")
 
 # --- 분석 대상 설정 ---
-TARGET_POLLUTANT = 'national_avg_PM10'
+TARGET_POLLUTANT = 'national_avg_PM10'   # 종속 변수
 TARGET_POWER = 'Power_GWh'
 
 
@@ -34,7 +39,7 @@ def analyze_decomposition():
         
     except FileNotFoundError:
         print(f"❌ 오류: 통합 데이터 파일({UNIFIED_MERGED_CSV})을 찾을 수 없습니다.")
-        print("      'merge_datasets_pandas_only.py'를 먼저 실행하여 이 파일을 생성하세요.")
+        print("      'unified_analysis_parquet.py'를 먼저 실행하여 이 파일을 생성하세요.")
         return
 
     # 2. 분석 대상 컬럼 설정 및 유효성 검사
@@ -44,6 +49,7 @@ def analyze_decomposition():
     print("\n=== 2. PM10 농도 시계열 분해 시작 ===")
     # Additive 모델: 관측치 = 추세 + 계절 + 잔차 (계절 변동 폭이 일정하다고 가정)
     # period=12: 월별 데이터이므로 주기는 12개월
+    # NaN 값이 있으면 분해에 실패하므로, dropna()를 사용하여 유효한 데이터만 사용합니다.
     result_pm10 = seasonal_decompose(df_analysis[TARGET_POLLUTANT].dropna(), model='additive', period=12)
     
     # 4. 화력 발전량 시계열 분해
@@ -96,7 +102,6 @@ def analyze_decomposition():
     
 def main():
     # Matplotlib이 한글을 지원하지 않을 수 있으므로, 폰트 설정을 추가하여 깨짐 방지
-    # Mac 환경에서는 NanumGothic 또는 AppleGothic 사용 권장
     try:
         plt.rcParams['font.family'] = 'AppleGothic'
     except:

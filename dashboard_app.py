@@ -14,6 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+from statsmodels.tsa.seasonal import seasonal_decompose
 
 from pathlib import Path
 
@@ -318,6 +319,125 @@ if aqi_cols:
         st.pyplot(fig4)
 else:
     st.info("pm10_z, no2_z, so2_z 중 최소 하나 이상이 있어야 AirQualityIndex를 계산할 수 있습니다.")
+
+st.markdown("---")
+
+# =========================
+# 8. 계절성 분해 분석 섹션 (analyze_seasonal_decomposition.py 기반)
+# =========================
+
+st.header("Seasonal Decomposition Analysis")
+
+# 계절성 분해 분석용 데이터 경로
+DECOMPOSE_CSV_PATH = BASE_DIR / "results" / "pandas_analysis" / "unified_national_merged_data.csv"
+TARGET_POLLUTANT = 'national_avg_PM10'
+TARGET_POWER = 'Power_GWh'
+
+# 계절성 분해 데이터 로드 함수
+@st.cache_data
+def load_decomposition_data(csv_path):
+    """계절성 분해 분석용 통합 데이터 로드"""
+    try:
+        df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
+        df.sort_index(inplace=True)
+        return df
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        st.error(f"데이터 로드 중 오류 발생: {e}")
+        return None
+
+def perform_seasonal_decomposition(series, model='additive', period=12):
+    """계절성 분해 수행"""
+    try:
+        result = seasonal_decompose(series.dropna(), model=model, period=period)
+        return result
+    except Exception as e:
+        st.error(f"계절성 분해 중 오류 발생: {e}")
+        return None
+
+# 계절성 분해 분석 실행
+decomposition_data = load_decomposition_data(DECOMPOSE_CSV_PATH)
+
+if decomposition_data is None:
+    st.warning(
+        f"계절성 분해 분석 데이터 파일을 찾을 수 없습니다: {DECOMPOSE_CSV_PATH}\n"
+        "`unified_analysis_parquet.py`를 먼저 실행하여 데이터 파일을 생성해주세요."
+    )
+else:
+    # 필요한 컬럼 확인
+    if TARGET_POLLUTANT not in decomposition_data.columns or TARGET_POWER not in decomposition_data.columns:
+        st.error(
+            f"필수 컬럼이 없습니다. 필요한 컬럼: {TARGET_POLLUTANT}, {TARGET_POWER}\n"
+            f"현재 컬럼: {list(decomposition_data.columns)}"
+        )
+    else:
+        try:
+            # 분석 대상 데이터 준비
+            df_analysis = decomposition_data[[TARGET_POLLUTANT, TARGET_POWER]].astype(float)
+            
+            # PM10 계절성 분해
+            st.subheader("PM10 Concentration Seasonal Decomposition")
+            result_pm10 = perform_seasonal_decomposition(df_analysis[TARGET_POLLUTANT], model='additive', period=12)
+            
+            if result_pm10 is not None:
+                fig1, axes = plt.subplots(4, 1, figsize=(14, 10), sharex=True)
+                
+                axes[0].plot(result_pm10.observed, label='Observed', color='blue')
+                axes[0].set_title('National Average PM10 Concentration Decomposition')
+                axes[0].legend()
+                axes[0].grid(True, alpha=0.3)
+                
+                axes[1].plot(result_pm10.trend, label='Trend', color='red')
+                axes[1].legend()
+                axes[1].grid(True, alpha=0.3)
+                
+                axes[2].plot(result_pm10.seasonal, label='Seasonal', color='green')
+                axes[2].legend()
+                axes[2].grid(True, alpha=0.3)
+                
+                axes[3].plot(result_pm10.resid, label='Residual', color='gray')
+                axes[3].legend()
+                axes[3].grid(True, alpha=0.3)
+                
+                plt.xlabel("Date")
+                plt.tight_layout()
+                st.pyplot(fig1)
+            
+            st.markdown("---")
+            
+            # Power 계절성 분해
+            st.subheader("Power Generation Seasonal Decomposition")
+            result_power = perform_seasonal_decomposition(df_analysis[TARGET_POWER], model='additive', period=12)
+            
+            if result_power is not None:
+                fig2, axes = plt.subplots(4, 1, figsize=(14, 10), sharex=True)
+                
+                axes[0].plot(result_power.observed, label='Observed', color='blue')
+                axes[0].set_title('National Thermal Power Generation Decomposition')
+                axes[0].legend()
+                axes[0].grid(True, alpha=0.3)
+                
+                axes[1].plot(result_power.trend, label='Trend', color='red')
+                axes[1].legend()
+                axes[1].grid(True, alpha=0.3)
+                
+                axes[2].plot(result_power.seasonal, label='Seasonal', color='green')
+                axes[2].legend()
+                axes[2].grid(True, alpha=0.3)
+                
+                axes[3].plot(result_power.resid, label='Residual', color='gray')
+                axes[3].legend()
+                axes[3].grid(True, alpha=0.3)
+                
+                plt.xlabel("Date")
+                plt.tight_layout()
+                st.pyplot(fig2)
+                
+        except Exception as e:
+            st.error(f"계절성 분해 분석 중 오류 발생: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
 st.markdown("---")
 st.caption(
